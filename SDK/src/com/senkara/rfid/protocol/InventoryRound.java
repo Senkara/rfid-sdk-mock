@@ -1,7 +1,6 @@
 package com.senkara.rfid.protocol;
 import com.senkara.rfid.model.TagRead;
 
-import java.util.Collections;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.Random;
@@ -53,7 +52,7 @@ public class InventoryRound {
             }
         }
     }
-    public List<TagRead>getSuccesfulTags(){
+    public List<TagRead> getSuccessfulTags(){
         List<TagRead>successfulTags=new ArrayList<>();
         for(Slot slot:slots){
             if(slot.hasSingleTag()){
@@ -61,6 +60,10 @@ public class InventoryRound {
             }
         }
         return successfulTags;
+    }
+
+    public List<TagRead>getSuccesfulTags(){
+        return getSuccessfulTags();
     }public int getEmptySlotCount(){
         int count=0;
         for(Slot slot:slots){

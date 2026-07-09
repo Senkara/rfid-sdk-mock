@@ -3,6 +3,10 @@ package com.senkara.rfid.sdk;
 import com.senkara.rfid.protocol.DynamicQAlgorithm;
 
 
+import java.util.HashMap;
+import java.util.Map;
+
+import com.senkara.rfid.protocol.InventorySession;
 import java.util.List;
 import java.util.function.Consumer;
 
@@ -12,6 +16,8 @@ import com.senkara.rfid.protocol.RoundResult;
 
 public class Reader {
 
+    private Map<String, Long>seenEpcs=new HashMap<>();
+    private InventorySession inventorySession = InventorySession.S0;
 
     private DynamicQAlgorithm dynamicQAlgorithm=new DynamicQAlgorithm();
 
@@ -28,10 +34,30 @@ public class Reader {
 
     private boolean connected = false;
     private volatile boolean inventoryRunning = false;
+    private Thread inventoryThread;
 
     private Consumer<TagRead> tagReadListener;
 
-    private TagGenerator tagGenerator=new TagGenerator();
+    private TagGenerator tagGenerator;
+
+    public Reader() {
+        this(new TagGenerator());
+    }
+
+    public Reader(TagGenerator tagGenerator) {
+        this.tagGenerator = tagGenerator;
+    }
+
+    public int getAntennaPower(){
+        return antennaPower;
+    }
+    public int getActiveAntenna(){
+        return activeAntenna;
+    }
+
+    public int getQValue(){
+        return qValue;
+    }
 
     public void connect() {
         if (connected) {
@@ -45,6 +71,11 @@ public class Reader {
 
     public void setTagReadListener(Consumer<TagRead> listener) {
         this.tagReadListener = listener;
+    }
+    public boolean isConnected(){
+        return connected;
+    }public boolean isInventoryRunning(){
+        return inventoryRunning;
     }
 
     public void startInventory() {
@@ -61,7 +92,7 @@ public class Reader {
         inventoryRunning = true;
         System.out.println("Inventory başladı.");
 
-        Thread inventoryThread = new Thread(() -> {
+        inventoryThread = new Thread(() -> {
             int roundNumber = 1;
 
             while (inventoryRunning) {
@@ -70,7 +101,7 @@ public class Reader {
 
                 InventoryRound round = new InventoryRound(qValue);
 
-                List<TagRead>generatedTags=tagGenerator.generateTagsForAntenna(activeAntenna);
+                List<TagRead>generatedTags=tagGenerator.generateTagsForAntenna(activeAntenna, antennaPower);
                 for(TagRead tag:generatedTags){
                     if(!inventoryRunning){
                         break;
@@ -86,7 +117,25 @@ public class Reader {
 
                 RoundResult roundResult=round.getResult();
 
-                List<TagRead> successfulTags = round.getSuccesfulTags();
+                List<TagRead> successfulTags = round.getSuccessfulTags();
+
+                if(inventorySession!=InventorySession.S0){
+                    long now = System.currentTimeMillis();
+                    successfulTags.removeIf(tag -> {
+                        Long lastSeenTime = seenEpcs.get(tag.getEpc());
+
+                        if (lastSeenTime == null) {
+                            return false;
+                        }
+
+                        long elapsedTime = now - lastSeenTime;
+                        return elapsedTime < getSessionTimeoutMillis();
+                    });
+
+                    for(TagRead tag:successfulTags){
+                        seenEpcs.put(tag.getEpc(), now);
+                    }
+                }
 
                 int newQ=dynamicQAlgorithm.calculateNewQ(qValue,roundResult);
 
@@ -115,7 +164,9 @@ public class Reader {
                     break;
                 }
             }
-        });
+            inventoryRunning = false;
+            inventoryThread = null;
+        }, "MockRfidInventoryThread");
 
         inventoryThread.start();
     }
@@ -127,6 +178,18 @@ public class Reader {
         }
 
         inventoryRunning = false;
+        Thread threadToStop = inventoryThread;
+        if (threadToStop != null) {
+            threadToStop.interrupt();
+            if (threadToStop != Thread.currentThread()) {
+                try {
+                    threadToStop.join();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    System.out.println("Inventory durdurulurken thread kesildi.");
+                }
+            }
+        }
         System.out.println("Inventory durduruldu.");
     }
 
@@ -189,5 +252,39 @@ public class Reader {
         this.qValue = qValue;
 
         System.out.println("Q değeri " + qValue + " olarak ayarlandı.");
+    }
+
+    public InventorySession getInventorySession() {
+        return inventorySession;
+    }
+
+    private long getSessionTimeoutMillis() {
+        switch (inventorySession) {
+            case S1:
+                return 2000;
+            case S2:
+                return 10000;
+            case S3:
+                return Long.MAX_VALUE;
+            default:
+                return 0;
+        }
+    }
+
+    public void setInventorySession(InventorySession inventorySession) {
+        if (!connected) {
+            System.out.println("Önce reader'a bağlan.");
+            return;
+        }
+
+        if (inventorySession == null) {
+            System.out.println("Session boş olamaz.");
+            return;
+        }
+
+        this.inventorySession = inventorySession;
+
+        seenEpcs.clear();
+        System.out.println("Inventory session " + inventorySession + " olarak ayarlandı.");
     }
 }

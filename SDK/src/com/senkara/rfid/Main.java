@@ -2,6 +2,7 @@ package com.senkara.rfid;
 
 import com.senkara.rfid.model.TagRead;
 import com.senkara.rfid.protocol.Slot;
+import com.senkara.rfid.protocol.InventorySession;
 import com.senkara.rfid.sdk.Reader;
 import com.senkara.rfid.protocol.InventoryRound;
 
@@ -20,6 +21,8 @@ public class Main {
     reader.setAntennaPower(20);
 
     reader.setQvalue(2);
+
+    reader.setInventorySession(InventorySession.S1);
 
     reader.setTagReadListener(tag->{
         System.out.println("EPC : "+tag.getEpc() );

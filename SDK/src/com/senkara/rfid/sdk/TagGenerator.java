@@ -11,15 +11,29 @@ import java.util.Random;
 
 public class TagGenerator {
 
-    private static final String FILE_NAME = "tags.csv";
+    private static final String DEFAULT_FILE_NAME = "tags.csv";
+    private static final int DEFAULT_POWER = 30;
 
+    private String fileName;
     private Random random = new Random();
 
+    public TagGenerator() {
+        this(DEFAULT_FILE_NAME);
+    }
+
+    public TagGenerator(String fileName) {
+        this.fileName = fileName;
+    }
+
     public List<TagRead> generateTagsForAntenna(int activeAntenna) {
+        return generateTagsForAntenna(activeAntenna, DEFAULT_POWER);
+    }
+
+    public List<TagRead> generateTagsForAntenna(int activeAntenna, int antennaPower) {
 
         List<TagRead> generatedTags = new ArrayList<>();
 
-        try (BufferedReader reader = new BufferedReader(new FileReader(FILE_NAME))) {
+        try (BufferedReader reader = new BufferedReader(new FileReader(fileName))) {
 
             String line;
 
@@ -35,7 +49,7 @@ public class TagGenerator {
                     continue;
                 }
 
-                int rssi = -55 + random.nextInt(11);
+                int rssi = generateRssi(antennaPower);
 
                 TagRead tag = new TagRead(
                         epc,
@@ -53,5 +67,9 @@ public class TagGenerator {
         }
 
         return generatedTags;
+    }
+
+    private int generateRssi(int antennaPower) {
+        return -85 + antennaPower + random.nextInt(11);
     }
 }
