@@ -6,6 +6,8 @@ import com.senkara.rfid.protocol.InventorySession;
 import com.senkara.rfid.sdk.Reader;
 import com.senkara.rfid.protocol.InventoryRound;
 
+import com.senkara.rfid.sdk.TagFilters;
+
 
 
 public class Main {
@@ -32,6 +34,7 @@ public class Main {
         System.out.println("TIME: " + tag.getReadTime());
         System.out.println("------------------------");
     });
+        reader.setTagFilter(TagFilters.epcStartsWith("300833B2DDD9014000000001"));
         reader.startInventory();
         Thread.sleep(10000);
         reader.stopInventory();

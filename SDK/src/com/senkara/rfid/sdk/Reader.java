@@ -2,6 +2,9 @@ package com.senkara.rfid.sdk;
 
 import com.senkara.rfid.protocol.DynamicQAlgorithm;
 
+import com.senkara.rfid.protocol.TagState;
+
+
 
 import java.util.HashMap;
 import java.util.Map;
@@ -15,8 +18,10 @@ import com.senkara.rfid.protocol.InventoryRound;
 import com.senkara.rfid.protocol.RoundResult;
 
 public class Reader {
+    private TagFilter tagFilter;
 
-    private Map<String, Long>seenEpcs=new HashMap<>();
+    private Map<String,TagState> tagStates=new HashMap<>();
+
     private InventorySession inventorySession = InventorySession.S0;
 
     private DynamicQAlgorithm dynamicQAlgorithm=new DynamicQAlgorithm();
@@ -72,6 +77,14 @@ public class Reader {
     public void setTagReadListener(Consumer<TagRead> listener) {
         this.tagReadListener = listener;
     }
+    public void setTagFilter(TagFilter tagFilter){
+        this.tagFilter=tagFilter;
+    }
+
+    public void clearTagFilter() {
+        this.tagFilter = null;
+    }
+
     public boolean isConnected(){
         return connected;
     }public boolean isInventoryRunning(){
@@ -102,6 +115,28 @@ public class Reader {
                 InventoryRound round = new InventoryRound(qValue);
 
                 List<TagRead>generatedTags=tagGenerator.generateTagsForAntenna(activeAntenna, antennaPower);
+                if(tagFilter !=null){
+                    generatedTags.removeIf(tag->!tagFilter.matches(tag));
+
+                    //Predicate kullanımına güzel örnek verdim.
+                    /*removeIf fonksiyonu içinde Predicate<T> döndürüyor .Predicateden gelen sonuc true ise siliyor.
+                    Normalde calıstırırken . test() diyip çalıştırmamız gerekiyor ama removeIf bunu yapıyor.
+                    generatedTags içindeki tagReadi yukarıdakı boolean fonksıyonu ıle kontrol ettiriyor.
+
+
+
+                     */
+                }
+                if(inventorySession != InventorySession.S0){
+                    generatedTags.removeIf(tag -> {
+                        TagState tagState=tagStates.get(tag.getEpc());
+                        if(tagState==null){
+                            tagState=new TagState();
+                            tagStates.put(tag.getEpc(), tagState);
+                        }
+                        return !tagState.canReply(inventorySession);
+                    });
+                }
                 for(TagRead tag:generatedTags){
                     if(!inventoryRunning){
                         break;
@@ -119,21 +154,13 @@ public class Reader {
 
                 List<TagRead> successfulTags = round.getSuccessfulTags();
 
-                if(inventorySession!=InventorySession.S0){
-                    long now = System.currentTimeMillis();
-                    successfulTags.removeIf(tag -> {
-                        Long lastSeenTime = seenEpcs.get(tag.getEpc());
-
-                        if (lastSeenTime == null) {
-                            return false;
-                        }
-
-                        long elapsedTime = now - lastSeenTime;
-                        return elapsedTime < getSessionTimeoutMillis();
-                    });
-
+                if(inventorySession != InventorySession.S0){
                     for(TagRead tag:successfulTags){
-                        seenEpcs.put(tag.getEpc(), now);
+                        TagState tagState=tagStates.get(tag.getEpc());
+                        if(tagState==null){
+                            tagState=new TagState();
+                            tagStates.put(tag.getEpc(), tagState);
+                        }tagState.markRead(inventorySession);
                     }
                 }
 
@@ -190,6 +217,7 @@ public class Reader {
                 }
             }
         }
+        resetAllTagStates();
         System.out.println("Inventory durduruldu.");
     }
 
@@ -258,18 +286,7 @@ public class Reader {
         return inventorySession;
     }
 
-    private long getSessionTimeoutMillis() {
-        switch (inventorySession) {
-            case S1:
-                return 2000;
-            case S2:
-                return 10000;
-            case S3:
-                return Long.MAX_VALUE;
-            default:
-                return 0;
-        }
-    }
+
 
     public void setInventorySession(InventorySession inventorySession) {
         if (!connected) {
@@ -284,7 +301,10 @@ public class Reader {
 
         this.inventorySession = inventorySession;
 
-        seenEpcs.clear();
         System.out.println("Inventory session " + inventorySession + " olarak ayarlandı.");
+    }private void resetAllTagStates(){
+        for(TagState tagState: tagStates.values()){
+            tagState.resetAll();
+        }
     }
 }

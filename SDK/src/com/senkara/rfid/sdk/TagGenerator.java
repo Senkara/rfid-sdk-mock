@@ -1,9 +1,8 @@
 package com.senkara.rfid.sdk;
 
 import com.senkara.rfid.model.TagRead;
+import com.senkara.rfid.model.TagRecord;
 
-import java.io.BufferedReader;
-import java.io.FileReader;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -16,6 +15,7 @@ public class TagGenerator {
 
     private String fileName;
     private Random random = new Random();
+    private CsvTagParser csvTagParser = new CsvTagParser();
 
     public TagGenerator() {
         this(DEFAULT_FILE_NAME);
@@ -32,41 +32,28 @@ public class TagGenerator {
     public List<TagRead> generateTagsForAntenna(int activeAntenna, int antennaPower) {
 
         List<TagRead> generatedTags = new ArrayList<>();
+        List<TagRecord> tagRecords = csvTagParser.parse(fileName);
 
-        try (BufferedReader reader = new BufferedReader(new FileReader(fileName))) {
-
-            String line;
-
-            while ((line = reader.readLine()) != null) {
-
-                String[] parts = line.split(",");
-
-                String epc = parts[0];
-                String tid = parts[1];
-                int antennaPort = Integer.parseInt(parts[2]);
-
-                if (antennaPort != activeAntenna) {
-                    continue;
-                }
-
-                int rssi = generateRssi(antennaPower);
-
-                TagRead tag = new TagRead(
-                        epc,
-                        tid,
-                        rssi,
-                        antennaPort,
-                        Instant.now()
-                );
-
-                generatedTags.add(tag);
+        for (TagRecord tagRecord : tagRecords) {
+            if (tagRecord.getAntennaPort() != activeAntenna) {
+                continue;
             }
 
-        } catch (Exception e) {
-            e.printStackTrace();
+            TagRead tag = createTagRead(tagRecord, antennaPower);
+            generatedTags.add(tag);
         }
 
         return generatedTags;
+    }
+
+    private TagRead createTagRead(TagRecord tagRecord, int antennaPower) {
+        return new TagRead(
+                tagRecord.getEpc(),
+                tagRecord.getTid(),
+                generateRssi(antennaPower),
+                tagRecord.getAntennaPort(),
+                Instant.now()
+        );
     }
 
     private int generateRssi(int antennaPower) {
